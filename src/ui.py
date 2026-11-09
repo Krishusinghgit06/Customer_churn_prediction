@@ -104,61 +104,74 @@ PRESET_DATA = {
     },
 }
 
-# Custom CSS for Modern Card Hierarchy & Styling
+# Custom CSS for Dark Mode & Clean Header
 st.markdown(
     """
     <style>
-    /* Global Container */
-    .block-container {
-        padding-top: 1.8rem;
-        padding-bottom: 3rem;
-        max-width: 1300px;
+    /* 1. Hide Deploy Button & Top Toolbar completely */
+    .stDeployButton {
+        display: none !important;
     }
-    /* Hide Streamlit default sidebar completely */
+    [data-testid="stToolbar"] {
+        visibility: hidden !important;
+        display: none !important;
+    }
+    header[data-testid="stHeader"] {
+        background: transparent !important;
+    }
     [data-testid="stSidebar"] {
         display: none !important;
     }
-    /* Card Container */
-    .ui-card {
-        background: #ffffff;
-        border: 1px solid #e2e8f0;
-        border-radius: 12px;
-        padding: 22px 20px 18px 20px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-        margin-bottom: 18px;
-        height: 100%;
+
+    /* 2. Global Container Sizing */
+    .block-container {
+        padding-top: 1.5rem;
+        padding-bottom: 3rem;
+        max-width: 1300px;
     }
+
+    /* 3. Card Title with high-contrast text and subtle divider */
     .ui-card-title {
         font-size: 1.15rem;
         font-weight: 700;
-        color: #0f172a;
+        color: var(--text-color, #f8fafc);
         margin-bottom: 14px;
         display: flex;
         align-items: center;
         gap: 8px;
-        border-bottom: 1px solid #f1f5f9;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.12);
         padding-bottom: 8px;
     }
-    /* Presets Box */
-    .preset-container {
-        background: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: 10px;
-        padding: 12px 18px;
-        margin-bottom: 22px;
+
+    /* 4. Subtitle Divider */
+    .sub-divider {
+        border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+        margin: 1.2rem 0;
     }
-    /* Badges */
+
+    /* 5. Presets Container with dark-mode friendly glassmorphism */
+    .preset-container {
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 10px;
+        padding: 10px 16px;
+        margin-bottom: 20px;
+    }
+
+    /* 6. Badges */
     .badge-threshold {
-        background: #e2e8f0;
-        color: #334155;
+        background: rgba(255, 255, 255, 0.08);
+        color: #e2e8f0;
+        border: 1px solid rgba(255, 255, 255, 0.15);
         padding: 5px 12px;
         border-radius: 16px;
         font-weight: 600;
         font-size: 0.85rem;
     }
     .badge-online {
-        background: #dcfce7;
-        color: #15803d;
+        background: rgba(34, 197, 94, 0.15);
+        color: #4ade80;
+        border: 1px solid rgba(34, 197, 94, 0.35);
         padding: 5px 12px;
         border-radius: 16px;
         font-weight: 600;
@@ -168,8 +181,9 @@ st.markdown(
         gap: 6px;
     }
     .badge-offline {
-        background: #fee2e2;
-        color: #b91c1c;
+        background: rgba(239, 68, 68, 0.15);
+        color: #f87171;
+        border: 1px solid rgba(239, 68, 68, 0.35);
         padding: 5px 12px;
         border-radius: 16px;
         font-weight: 600;
@@ -190,10 +204,12 @@ st.markdown(
         border-radius: 50%;
         background: #ef4444;
     }
-    /* Risk Badges */
+
+    /* 7. Risk Badges & Callouts */
     .risk-badge-high {
-        background: #fee2e2;
-        color: #dc2626;
+        background: rgba(239, 68, 68, 0.2);
+        color: #f87171;
+        border: 1px solid rgba(239, 68, 68, 0.45);
         padding: 6px 14px;
         border-radius: 20px;
         font-weight: 700;
@@ -203,8 +219,9 @@ st.markdown(
         gap: 6px;
     }
     .risk-badge-low {
-        background: #dcfce7;
-        color: #16a34a;
+        background: rgba(34, 197, 94, 0.2);
+        color: #4ade80;
+        border: 1px solid rgba(34, 197, 94, 0.45);
         padding: 6px 14px;
         border-radius: 20px;
         font-weight: 700;
@@ -214,16 +231,18 @@ st.markdown(
         gap: 6px;
     }
     .pill-inc {
-        background: #fee2e2;
-        color: #b91c1c;
+        background: rgba(239, 68, 68, 0.2);
+        color: #fca5a5;
+        border: 1px solid rgba(239, 68, 68, 0.3);
         padding: 3px 9px;
         border-radius: 12px;
         font-weight: 600;
         font-size: 0.8rem;
     }
     .pill-dec {
-        background: #dcfce7;
-        color: #15803d;
+        background: rgba(34, 197, 94, 0.2);
+        color: #86efac;
+        border: 1px solid rgba(34, 197, 94, 0.3);
         padding: 3px 9px;
         border-radius: 12px;
         font-weight: 600;
@@ -234,7 +253,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# 1. Header with Title & Live API Status Badge
+# 1. Header with High-Contrast Typography & Live API Status Badge
 is_online, health_data = check_api_status()
 if is_online:
     status_html = f'<span class="badge-online"><span class="dot-green"></span> API Online ({health_data.get("model_type", "XGBoost")})</span>'
@@ -243,12 +262,12 @@ else:
 
 st.markdown(
     f"""
-    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
         <div>
-            <h1 style="margin: 0; font-size: 2.15rem; font-weight: 800; color: #0f172a; letter-spacing: -0.02em;">
+            <h1 style="margin: 0; font-size: 2.15rem; font-weight: 800; color: #f8fafc; letter-spacing: -0.02em;">
                 📊 Customer Churn Prediction Engine
             </h1>
-            <p style="margin: 4px 0 0 0; color: #64748b; font-size: 1.05rem;">
+            <p style="margin: 6px 0 0 0; color: #94a3b8; font-size: 1.05rem;">
                 XGBoost Binary Classifier with real-time SHAP TreeExplainer feature attributions
             </p>
         </div>
@@ -257,6 +276,7 @@ st.markdown(
             {status_html}
         </div>
     </div>
+    <div class="sub-divider"></div>
     """,
     unsafe_allow_html=True,
 )
@@ -391,7 +411,7 @@ btn_col1, btn_col2, btn_col3 = st.columns([1, 1.6, 1])
 with btn_col2:
     run_assessment = st.button("🚀 Run Churn Assessment", type="primary", use_container_width=True)
 
-# 5. Polished Results Section
+# 5. Polished Results Section with Dark-Mode Contrast
 if run_assessment:
     payload = {
         "customerID": customer_id,
@@ -453,8 +473,8 @@ if run_assessment:
                             )
                             st.markdown(
                                 """
-                                <div style="background: #fff5f5; border-left: 4px solid #ef4444; padding: 12px; margin-top: 14px; border-radius: 4px; font-size: 0.9rem; color: #7f1d1d;">
-                                    <strong>Automated Action:</strong> Customer is at high risk of churning. Proactively trigger retention offer: 12-month contract lock discount, loyalty credit, or free premium tech support.
+                                <div style="background: rgba(239, 68, 68, 0.12); border-left: 4px solid #ef4444; padding: 12px; margin-top: 14px; border-radius: 4px; font-size: 0.9rem; color: #fca5a5;">
+                                    <strong style="color: #f87171;">Automated Action:</strong> Customer is at high risk of churning. Proactively trigger retention offer: 12-month contract lock discount, loyalty credit, or free premium tech support.
                                 </div>
                                 """,
                                 unsafe_allow_html=True,
@@ -466,8 +486,8 @@ if run_assessment:
                             )
                             st.markdown(
                                 """
-                                <div style="background: #f0fdf4; border-left: 4px solid #22c55e; padding: 12px; margin-top: 14px; border-radius: 4px; font-size: 0.9rem; color: #14532d;">
-                                    <strong>Automated Action:</strong> Customer shows strong retention indicators. Maintain standard engagement and explore cross-sell opportunities (e.g., streaming add-ons).
+                                <div style="background: rgba(34, 197, 94, 0.12); border-left: 4px solid #22c55e; padding: 12px; margin-top: 14px; border-radius: 4px; font-size: 0.9rem; color: #86efac;">
+                                    <strong style="color: #4ade80;">Automated Action:</strong> Customer shows strong retention indicators. Maintain standard engagement and explore cross-sell opportunities (e.g., streaming add-ons).
                                 </div>
                                 """,
                                 unsafe_allow_html=True,
@@ -499,16 +519,16 @@ if run_assessment:
                             st.markdown(
                                 f"""
                                 <div style="margin-bottom: 14px;">
-                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                                        <span style="font-weight: 600; color: #1e293b; font-size: 0.95rem;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                                        <span style="font-weight: 600; color: #f1f5f9; font-size: 0.95rem;">
                                             {i}. {fname}
                                         </span>
                                         <div style="display: flex; align-items: center; gap: 8px;">
-                                            <span style="font-family: monospace; font-weight: 700; color: #334155;">{sign}{attr:.4f}</span>
+                                            <span style="font-family: monospace; font-weight: 700; color: #cbd5e1;">{sign}{attr:.4f}</span>
                                             <span class="{pill_class}">{pill_label}</span>
                                         </div>
                                     </div>
-                                    <div style="background: #f1f5f9; border-radius: 6px; height: 10px; width: 100%; overflow: hidden;">
+                                    <div style="background: rgba(255, 255, 255, 0.12); border-radius: 6px; height: 9px; width: 100%; overflow: hidden;">
                                         <div style="background: {bar_color}; width: {bar_pct}%; height: 100%; border-radius: 6px;"></div>
                                     </div>
                                 </div>
