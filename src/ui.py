@@ -1,227 +1,398 @@
 """Streamlit Dashboard for real-time customer churn prediction and SHAP explainability."""
 
-import json
+import os
 from typing import Any, Dict
 import requests
 import streamlit as st
 
+# Configure wide layout without sidebar
 st.set_page_config(
     page_title="Customer Churn Prediction Engine",
     page_icon="📊",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
-# Custom Styling
+# API Configuration (internal default with env override, no sidebar)
+API_BASE_URL = os.getenv("API_URL", "http://127.0.0.1:8000").rstrip("/")
+PREDICT_URL = f"{API_BASE_URL}/predict"
+HEALTH_URL = f"{API_BASE_URL}/health"
+
+
+def check_api_status():
+    """Pings FastAPI /health endpoint to check server availability."""
+    try:
+        r = requests.get(HEALTH_URL, timeout=1.5)
+        if r.status_code == 200:
+            return True, r.json()
+    except Exception:
+        pass
+    return False, None
+
+
+# Presets Definition
+PRESET_CUSTOM = "Custom"
+PRESET_HIGH_RISK = "🔴 High Churn Risk (Month-to-month, Fiber, No Support)"
+PRESET_LOYAL = "🟢 Loyal Customer (Two-year, DSL, High Tenure)"
+
+PRESET_DATA = {
+    PRESET_HIGH_RISK: {
+        "customerID": "9999-RISK1",
+        "gender": "Female",
+        "SeniorCitizen": 0,
+        "Partner": "No",
+        "Dependents": "No",
+        "tenure": 1,
+        "Contract": "Month-to-month",
+        "PaperlessBilling": "Yes",
+        "PaymentMethod": "Electronic check",
+        "MonthlyCharges": 95.50,
+        "TotalCharges": 95.50,
+        "PhoneService": "Yes",
+        "MultipleLines": "No",
+        "InternetService": "Fiber optic",
+        "OnlineSecurity": "No",
+        "OnlineBackup": "No",
+        "DeviceProtection": "No",
+        "TechSupport": "No",
+        "StreamingTV": "Yes",
+        "StreamingMovies": "Yes",
+    },
+    PRESET_LOYAL: {
+        "customerID": "0001-LOYAL",
+        "gender": "Male",
+        "SeniorCitizen": 0,
+        "Partner": "Yes",
+        "Dependents": "Yes",
+        "tenure": 65,
+        "Contract": "Two year",
+        "PaperlessBilling": "No",
+        "PaymentMethod": "Bank transfer (automatic)",
+        "MonthlyCharges": 45.20,
+        "TotalCharges": 2938.00,
+        "PhoneService": "Yes",
+        "MultipleLines": "Yes",
+        "InternetService": "DSL",
+        "OnlineSecurity": "Yes",
+        "OnlineBackup": "Yes",
+        "DeviceProtection": "Yes",
+        "TechSupport": "Yes",
+        "StreamingTV": "No",
+        "StreamingMovies": "No",
+    },
+    PRESET_CUSTOM: {
+        "customerID": "7590-VHVEG",
+        "gender": "Female",
+        "SeniorCitizen": 0,
+        "Partner": "No",
+        "Dependents": "No",
+        "tenure": 12,
+        "Contract": "Month-to-month",
+        "PaperlessBilling": "Yes",
+        "PaymentMethod": "Electronic check",
+        "MonthlyCharges": 70.00,
+        "TotalCharges": 840.00,
+        "PhoneService": "Yes",
+        "MultipleLines": "No",
+        "InternetService": "Fiber optic",
+        "OnlineSecurity": "No",
+        "OnlineBackup": "No",
+        "DeviceProtection": "No",
+        "TechSupport": "No",
+        "StreamingTV": "No",
+        "StreamingMovies": "No",
+    },
+}
+
+# Custom CSS for Modern Card Hierarchy & Styling
 st.markdown(
     """
     <style>
-    .metric-card {
-        background-color: #f8f9fa;
+    /* Global Container */
+    .block-container {
+        padding-top: 1.8rem;
+        padding-bottom: 3rem;
+        max-width: 1300px;
+    }
+    /* Hide Streamlit default sidebar completely */
+    [data-testid="stSidebar"] {
+        display: none !important;
+    }
+    /* Card Container */
+    .ui-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 22px 20px 18px 20px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        margin-bottom: 18px;
+        height: 100%;
+    }
+    .ui-card-title {
+        font-size: 1.15rem;
+        font-weight: 700;
+        color: #0f172a;
+        margin-bottom: 14px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        border-bottom: 1px solid #f1f5f9;
+        padding-bottom: 8px;
+    }
+    /* Presets Box */
+    .preset-container {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
         border-radius: 10px;
-        padding: 20px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        margin-bottom: 20px;
+        padding: 12px 18px;
+        margin-bottom: 22px;
     }
-    .risk-high {
-        color: #d90429;
-        font-weight: 700;
-        font-size: 1.4rem;
-    }
-    .risk-low {
-        color: #2b9348;
-        font-weight: 700;
-        font-size: 1.4rem;
-    }
-    .badge-pos {
-        background-color: #ffe3e3;
-        color: #c92a2a;
-        padding: 4px 10px;
-        border-radius: 6px;
+    /* Badges */
+    .badge-threshold {
+        background: #e2e8f0;
+        color: #334155;
+        padding: 5px 12px;
+        border-radius: 16px;
         font-weight: 600;
+        font-size: 0.85rem;
     }
-    .badge-neg {
-        background-color: #e6fcf5;
-        color: #0ca678;
-        padding: 4px 10px;
-        border-radius: 6px;
+    .badge-online {
+        background: #dcfce7;
+        color: #15803d;
+        padding: 5px 12px;
+        border-radius: 16px;
         font-weight: 600;
+        font-size: 0.85rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .badge-offline {
+        background: #fee2e2;
+        color: #b91c1c;
+        padding: 5px 12px;
+        border-radius: 16px;
+        font-weight: 600;
+        font-size: 0.85rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .dot-green {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #22c55e;
+    }
+    .dot-red {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #ef4444;
+    }
+    /* Risk Badges */
+    .risk-badge-high {
+        background: #fee2e2;
+        color: #dc2626;
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-weight: 700;
+        font-size: 0.95rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .risk-badge-low {
+        background: #dcfce7;
+        color: #16a34a;
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-weight: 700;
+        font-size: 0.95rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .pill-inc {
+        background: #fee2e2;
+        color: #b91c1c;
+        padding: 3px 9px;
+        border-radius: 12px;
+        font-weight: 600;
+        font-size: 0.8rem;
+    }
+    .pill-dec {
+        background: #dcfce7;
+        color: #15803d;
+        padding: 3px 9px;
+        border-radius: 12px;
+        font-weight: 600;
+        font-size: 0.8rem;
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-# Sidebar Configuration
-st.sidebar.title("⚙️ Service Settings")
-api_base = st.sidebar.text_input("FastAPI Base URL", value="http://127.0.0.1:8000")
-predict_endpoint = f"{api_base.rstrip('/')}/predict"
-health_endpoint = f"{api_base.rstrip('/')}/health"
-
-if st.sidebar.button("Test API Connection"):
-    try:
-        resp = requests.get(health_endpoint, timeout=3)
-        if resp.status_code == 200:
-            data = resp.json()
-            st.sidebar.success(f"Connected! Model: {data.get('model_type')} (v{data.get('model_version')})")
-        else:
-            st.sidebar.error(f"Health check failed: HTTP {resp.status_code}")
-    except Exception as e:
-        st.sidebar.error(f"Could not connect to FastAPI server at {health_endpoint}: {e}")
-
-st.sidebar.markdown("---")
-st.sidebar.subheader("Quick Presets")
-preset = st.sidebar.radio(
-    "Load Scenario:",
-    ["Custom", "High Churn Risk Customer", "Loyal Long-Term Customer"],
-)
-
-# Header
-st.title("📊 Customer Churn Prediction & Explainability Engine")
-st.markdown(
-    "Evaluate customer retention risk powered by **XGBoost** and interpret individual decisions via **SHAP TreeExplainer**."
-)
-
-# Set defaults based on preset
-if preset == "High Churn Risk Customer":
-    default_gender = "Female"
-    default_senior = 0
-    default_partner = "No"
-    default_dependents = "No"
-    default_tenure = 1
-    default_contract = "Month-to-month"
-    default_paperless = "Yes"
-    default_payment = "Electronic check"
-    default_monthly = 95.50
-    default_phone = "Yes"
-    default_lines = "No"
-    default_internet = "Fiber optic"
-    default_sec = "No"
-    default_backup = "No"
-    default_device = "No"
-    default_tech = "No"
-    default_tv = "Yes"
-    default_movies = "Yes"
-elif preset == "Loyal Long-Term Customer":
-    default_gender = "Male"
-    default_senior = 0
-    default_partner = "Yes"
-    default_dependents = "Yes"
-    default_tenure = 65
-    default_contract = "Two year"
-    default_paperless = "No"
-    default_payment = "Bank transfer (automatic)"
-    default_monthly = 45.20
-    default_phone = "Yes"
-    default_lines = "Yes"
-    default_internet = "DSL"
-    default_sec = "Yes"
-    default_backup = "Yes"
-    default_device = "Yes"
-    default_tech = "Yes"
-    default_tv = "No"
-    default_movies = "No"
+# 1. Header with Title & Live API Status Badge
+is_online, health_data = check_api_status()
+if is_online:
+    status_html = f'<span class="badge-online"><span class="dot-green"></span> API Online ({health_data.get("model_type", "XGBoost")})</span>'
 else:
-    default_gender = "Female"
-    default_senior = 0
-    default_partner = "No"
-    default_dependents = "No"
-    default_tenure = 12
-    default_contract = "Month-to-month"
-    default_paperless = "Yes"
-    default_payment = "Electronic check"
-    default_monthly = 70.00
-    default_phone = "Yes"
-    default_lines = "No"
-    default_internet = "Fiber optic"
-    default_sec = "No"
-    default_backup = "No"
-    default_device = "No"
-    default_tech = "No"
-    default_tv = "No"
-    default_movies = "No"
+    status_html = '<span class="badge-offline"><span class="dot-red"></span> API Offline (127.0.0.1:8000)</span>'
 
-# Input Form in 3 Columns
-st.markdown("### Customer Profile Details")
-col1, col2, col3 = st.columns(3)
+st.markdown(
+    f"""
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
+        <div>
+            <h1 style="margin: 0; font-size: 2.15rem; font-weight: 800; color: #0f172a; letter-spacing: -0.02em;">
+                📊 Customer Churn Prediction Engine
+            </h1>
+            <p style="margin: 4px 0 0 0; color: #64748b; font-size: 1.05rem;">
+                XGBoost Binary Classifier with real-time SHAP TreeExplainer feature attributions
+            </p>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center; margin-top: 4px;">
+            <span class="badge-threshold">Threshold: 0.45</span>
+            {status_html}
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
-with col1:
-    st.subheader("1. Demographics & Account")
-    customer_id = st.text_input("Customer ID", value="CUST-7590")
-    gender = st.selectbox("Gender", ["Female", "Male"], index=0 if default_gender == "Female" else 1)
-    senior_citizen_val = st.selectbox("Senior Citizen", ["No", "Yes"], index=default_senior)
-    senior_citizen = 1 if senior_citizen_val == "Yes" else 0
-    partner = st.selectbox("Partner", ["No", "Yes"], index=0 if default_partner == "No" else 1)
-    dependents = st.selectbox("Dependents", ["No", "Yes"], index=0 if default_dependents == "No" else 1)
-    tenure = st.slider("Tenure (Months)", min_value=0, max_value=72, value=default_tenure)
+# 2. Main Page Scenario Preset Selector
+st.markdown('<div class="preset-container">', unsafe_allow_html=True)
+selected_preset = st.radio(
+    "⚡ Select Profile Preset:",
+    [PRESET_CUSTOM, PRESET_HIGH_RISK, PRESET_LOYAL],
+    horizontal=True,
+    key="active_preset",
+)
+st.markdown("</div>", unsafe_allow_html=True)
 
-with col2:
-    st.subheader("2. Contract & Billing")
-    contract = st.selectbox(
-        "Contract Term",
-        ["Month-to-month", "One year", "Two year"],
-        index=["Month-to-month", "One year", "Two year"].index(default_contract),
-    )
-    paperless_billing = st.selectbox("Paperless Billing", ["Yes", "No"], index=0 if default_paperless == "Yes" else 1)
-    payment_method = st.selectbox(
-        "Payment Method",
-        [
+# Update session state fields when preset selection changes
+if "last_preset" not in st.session_state or st.session_state.last_preset != selected_preset:
+    st.session_state.last_preset = selected_preset
+    defaults = PRESET_DATA[selected_preset]
+    for k, v in defaults.items():
+        st.session_state[f"field_{k}"] = v
+
+# Fallback initialization if first load
+curr_defaults = PRESET_DATA[selected_preset]
+for k, v in curr_defaults.items():
+    if f"field_{k}" not in st.session_state:
+        st.session_state[f"field_{k}"] = v
+
+# 3. Modern 3-Card Layout for Input Fields
+card_col1, card_col2, card_col3 = st.columns(3, gap="medium")
+
+# --- CARD 1: Customer & Demographics ---
+with card_col1:
+    with st.container(border=True):
+        st.markdown('<div class="ui-card-title">👤 Customer & Demographics</div>', unsafe_allow_html=True)
+        customer_id = st.text_input("Customer ID", value=st.session_state["field_customerID"])
+        
+        gender_idx = 0 if st.session_state["field_gender"] == "Female" else 1
+        gender = st.selectbox("Gender", ["Female", "Male"], index=gender_idx)
+        
+        senior_idx = 1 if st.session_state["field_SeniorCitizen"] == 1 else 0
+        senior_citizen_val = st.selectbox("Senior Citizen", ["No", "Yes"], index=senior_idx)
+        senior_citizen = 1 if senior_citizen_val == "Yes" else 0
+        
+        partner_idx = 0 if st.session_state["field_Partner"] == "No" else 1
+        partner = st.selectbox("Partner", ["No", "Yes"], index=partner_idx)
+        
+        dependents_idx = 0 if st.session_state["field_Dependents"] == "No" else 1
+        dependents = st.selectbox("Dependents", ["No", "Yes"], index=dependents_idx)
+
+# --- CARD 2: Contract & Billing ---
+with card_col2:
+    with st.container(border=True):
+        st.markdown('<div class="ui-card-title">📑 Contract & Billing</div>', unsafe_allow_html=True)
+        tenure = st.slider(
+            "Tenure (Months with Company)",
+            min_value=0,
+            max_value=72,
+            value=int(st.session_state["field_tenure"]),
+        )
+        
+        contract_opts = ["Month-to-month", "One year", "Two year"]
+        contract_idx = contract_opts.index(st.session_state["field_Contract"])
+        contract = st.selectbox("Contract Term", contract_opts, index=contract_idx)
+        
+        paperless_idx = 0 if st.session_state["field_PaperlessBilling"] == "Yes" else 1
+        paperless_billing = st.selectbox("Paperless Billing", ["Yes", "No"], index=paperless_idx)
+        
+        payment_opts = [
             "Electronic check",
             "Mailed check",
             "Bank transfer (automatic)",
             "Credit card (automatic)",
-        ],
-        index=[
-            "Electronic check",
-            "Mailed check",
-            "Bank transfer (automatic)",
-            "Credit card (automatic)",
-        ].index(default_payment),
-    )
-    monthly_charges = st.number_input(
-        "Monthly Charges ($)",
-        min_value=18.0,
-        max_value=130.0,
-        value=float(default_monthly),
-        step=1.0,
-    )
-    total_charges = st.number_input(
-        "Total Lifetime Charges ($)",
-        min_value=0.0,
-        max_value=10000.0,
-        value=float(round(monthly_charges * max(tenure, 1), 2)),
-        step=10.0,
-    )
+        ]
+        payment_idx = payment_opts.index(st.session_state["field_PaymentMethod"])
+        payment_method = st.selectbox("Payment Method", payment_opts, index=payment_idx)
+        
+        monthly_charges = st.number_input(
+            "Monthly Charges ($)",
+            min_value=18.0,
+            max_value=130.0,
+            value=float(st.session_state["field_MonthlyCharges"]),
+            step=1.0,
+        )
+        
+        total_charges = st.number_input(
+            "Total Lifetime Charges ($)",
+            min_value=0.0,
+            max_value=10000.0,
+            value=float(st.session_state["field_TotalCharges"]),
+            step=10.0,
+        )
 
-with col3:
-    st.subheader("3. Subscribed Services")
-    phone_service = st.selectbox("Phone Service", ["Yes", "No"], index=0 if default_phone == "Yes" else 1)
-    multiple_lines_options = ["No phone service", "No", "Yes"] if phone_service == "No" else ["No", "Yes"]
-    multiple_lines = st.selectbox(
-        "Multiple Lines",
-        ["No phone service", "No", "Yes"],
-        index=["No phone service", "No", "Yes"].index(default_lines if phone_service == "Yes" else "No phone service"),
-    )
-    internet_service = st.selectbox(
-        "Internet Service Provider",
-        ["Fiber optic", "DSL", "No"],
-        index=["Fiber optic", "DSL", "No"].index(default_internet),
-    )
+# --- CARD 3: Subscribed Services ---
+with card_col3:
+    with st.container(border=True):
+        st.markdown('<div class="ui-card-title">🌐 Subscribed Services</div>', unsafe_allow_html=True)
+        phone_idx = 0 if st.session_state["field_PhoneService"] == "Yes" else 1
+        phone_service = st.selectbox("Phone Service", ["Yes", "No"], index=phone_idx)
+        
+        lines_opts = ["No phone service", "No", "Yes"]
+        lines_idx = lines_opts.index(st.session_state["field_MultipleLines"])
+        multiple_lines = st.selectbox("Multiple Lines", lines_opts, index=lines_idx)
+        
+        internet_opts = ["Fiber optic", "DSL", "No"]
+        internet_idx = internet_opts.index(st.session_state["field_InternetService"])
+        internet_service = st.selectbox("Internet Service Provider", internet_opts, index=internet_idx)
+        
+        addon_opts = ["No", "Yes", "No internet service"]
+        
+        tech_idx = addon_opts.index(st.session_state["field_TechSupport"])
+        tech_support = st.selectbox("Tech Support", addon_opts, index=tech_idx)
+        
+        sec_idx = addon_opts.index(st.session_state["field_OnlineSecurity"])
+        online_security = st.selectbox("Online Security", addon_opts, index=sec_idx)
+        
+        backup_idx = addon_opts.index(st.session_state["field_OnlineBackup"])
+        online_backup = st.selectbox("Online Backup", addon_opts, index=backup_idx)
+        
+        device_idx = addon_opts.index(st.session_state["field_DeviceProtection"])
+        device_protection = st.selectbox("Device Protection", addon_opts, index=device_idx)
+        
+        tv_idx = addon_opts.index(st.session_state["field_StreamingTV"])
+        streaming_tv = st.selectbox("Streaming TV", addon_opts, index=tv_idx)
+        
+        movie_idx = addon_opts.index(st.session_state["field_StreamingMovies"])
+        streaming_movies = st.selectbox("Streaming Movies", addon_opts, index=movie_idx)
 
-    addon_options = ["No", "Yes", "No internet service"] if internet_service != "No" else ["No internet service"]
-    online_security = st.selectbox("Online Security", ["No", "Yes", "No internet service"], index=["No", "Yes", "No internet service"].index(default_sec if internet_service != "No" else "No internet service"))
-    online_backup = st.selectbox("Online Backup", ["No", "Yes", "No internet service"], index=["No", "Yes", "No internet service"].index(default_backup if internet_service != "No" else "No internet service"))
-    device_protection = st.selectbox("Device Protection", ["No", "Yes", "No internet service"], index=["No", "Yes", "No internet service"].index(default_device if internet_service != "No" else "No internet service"))
-    tech_support = st.selectbox("Tech Support", ["No", "Yes", "No internet service"], index=["No", "Yes", "No internet service"].index(default_tech if internet_service != "No" else "No internet service"))
-    streaming_tv = st.selectbox("Streaming TV", ["No", "Yes", "No internet service"], index=["No", "Yes", "No internet service"].index(default_tv if internet_service != "No" else "No internet service"))
-    streaming_movies = st.selectbox("Streaming Movies", ["No", "Yes", "No internet service"], index=["No", "Yes", "No internet service"].index(default_movies if internet_service != "No" else "No internet service"))
+# 4. Prominent Centered Predict Action
+st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
+btn_col1, btn_col2, btn_col3 = st.columns([1, 1.6, 1])
 
-st.markdown("---")
+with btn_col2:
+    run_assessment = st.button("🚀 Run Churn Assessment", type="primary", use_container_width=True)
 
-# Prediction Action
-evaluate_btn = st.button("🚀 Evaluate Churn Risk", type="primary", use_container_width=True)
-
-if evaluate_btn:
+# 5. Polished Results Section
+if run_assessment:
     payload = {
         "customerID": customer_id,
         "gender": gender,
@@ -245,79 +416,126 @@ if evaluate_btn:
         "TotalCharges": total_charges,
     }
 
-    with st.spinner("Calling FastAPI inference service and calculating SHAP attributions..."):
+    with st.spinner("Executing XGBoost pipeline and extracting SHAP TreeExplainer attributions..."):
         try:
-            response = requests.post(predict_endpoint, json=payload, timeout=8)
-            if response.status_code == 200:
-                result = response.json()
+            resp = requests.post(PREDICT_URL, json=payload, timeout=6.0)
+            if resp.status_code == 200:
+                result = resp.json()
                 churn_prob = result["churn_probability"]
                 churn_pred = result["churn_prediction"]
                 threshold = result["threshold_used"]
                 top_features = result.get("top_driving_features", [])
 
-                st.markdown("## 🎯 Prediction & Risk Analysis")
+                st.markdown("<div style='margin-top: 18px;'></div>", unsafe_allow_html=True)
+                st.markdown("### 🎯 Assessment Results")
 
-                res_col1, res_col2 = st.columns([1, 2])
+                res_card1, res_card2 = st.columns([1.1, 1.9], gap="medium")
 
-                with res_col1:
-                    st.metric(
-                        label="Predicted Churn Probability",
-                        value=f"{churn_prob * 100:.1f}%",
-                        delta=f"Threshold: {threshold * 100:.0f}%",
-                        delta_color="off",
-                    )
-                    st.progress(float(churn_prob))
-
-                    if churn_pred == 1:
-                        st.error("🚨 **HIGH RISK**: Customer is likely to churn. Immediate retention intervention recommended.")
-                    else:
-                        st.success("✅ **LOW RISK**: Customer is expected to stay with current retention strategy.")
-
-                with res_col2:
-                    st.markdown("### 🔍 Top 3 Contributing Factors (SHAP Explanations)")
-                    st.caption("Feature attribution shows the direction and magnitude pushing the risk higher or lower.")
-
-                    for i, feat in enumerate(top_features, 1):
-                        feature_name = feat["feature"]
-                        attribution = feat["attribution"]
-                        impact = feat["impact"]
-                        is_risk_increase = "Increases" in impact
-
-                        badge_class = "badge-pos" if is_risk_increase else "badge-neg"
-                        icon = "🔺" if is_risk_increase else "🔻"
-                        sign = "+" if attribution > 0 else ""
-
-                        st.markdown(
-                            f"""
-                            <div style="border: 1px solid #dee2e6; border-radius: 8px; padding: 12px; margin-bottom: 10px; background-color: #ffffff;">
-                                <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <span style="font-weight: 600; font-size: 1.05rem;">{i}. {feature_name}</span>
-                                    <span class="{badge_class}">{icon} {impact} ({sign}{attribution:.4f})</span>
+                # Left: Risk Summary Card
+                with res_card1:
+                    with st.container(border=True):
+                        st.markdown('<div class="ui-card-title">📈 Churn Risk Profile</div>', unsafe_allow_html=True)
+                        
+                        prob_pct = churn_prob * 100
+                        st.metric(
+                            label="Predicted Churn Probability",
+                            value=f"{prob_pct:.1f}%",
+                            delta=f"Threshold: {threshold * 100:.0f}%",
+                            delta_color="off",
+                        )
+                        st.progress(float(churn_prob))
+                        
+                        st.markdown("<div style='margin-top: 12px;'></div>", unsafe_allow_html=True)
+                        if churn_pred == 1:
+                            st.markdown(
+                                '<div class="risk-badge-high">🚨 HIGH RISK (Churn Likely)</div>',
+                                unsafe_allow_html=True,
+                            )
+                            st.markdown(
+                                """
+                                <div style="background: #fff5f5; border-left: 4px solid #ef4444; padding: 12px; margin-top: 14px; border-radius: 4px; font-size: 0.9rem; color: #7f1d1d;">
+                                    <strong>Automated Action:</strong> Customer is at high risk of churning. Proactively trigger retention offer: 12-month contract lock discount, loyalty credit, or free premium tech support.
                                 </div>
-                            </div>
-                            """,
+                                """,
+                                unsafe_allow_html=True,
+                            )
+                        else:
+                            st.markdown(
+                                '<div class="risk-badge-low">✅ LOW RISK (Retained)</div>',
+                                unsafe_allow_html=True,
+                            )
+                            st.markdown(
+                                """
+                                <div style="background: #f0fdf4; border-left: 4px solid #22c55e; padding: 12px; margin-top: 14px; border-radius: 4px; font-size: 0.9rem; color: #14532d;">
+                                    <strong>Automated Action:</strong> Customer shows strong retention indicators. Maintain standard engagement and explore cross-sell opportunities (e.g., streaming add-ons).
+                                </div>
+                                """,
+                                unsafe_allow_html=True,
+                            )
+
+                # Right: Interactive SHAP Feature Drivers
+                with res_card2:
+                    with st.container(border=True):
+                        st.markdown(
+                            '<div class="ui-card-title">🔍 Top 3 Contributing Factors (SHAP TreeExplainer)</div>',
                             unsafe_allow_html=True,
                         )
+                        st.caption("Individual feature contributions driving the prediction above or below baseline log-odds:")
 
-                with st.expander("📦 Raw API Response Payload"):
+                        max_abs_attr = max([abs(f["attribution"]) for f in top_features] + [1.0])
+
+                        for i, feat in enumerate(top_features, 1):
+                            fname = feat["feature"]
+                            attr = feat["attribution"]
+                            impact = feat["impact"]
+                            is_inc = "Increases" in impact
+
+                            pill_class = "pill-inc" if is_inc else "pill-dec"
+                            pill_label = "Increases Risk" if is_inc else "Decreases Risk"
+                            bar_color = "#ef4444" if is_inc else "#10b981"
+                            sign = "+" if attr > 0 else ""
+                            bar_pct = min(max(int((abs(attr) / max_abs_attr) * 100), 10), 100)
+
+                            st.markdown(
+                                f"""
+                                <div style="margin-bottom: 14px;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                        <span style="font-weight: 600; color: #1e293b; font-size: 0.95rem;">
+                                            {i}. {fname}
+                                        </span>
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span style="font-family: monospace; font-weight: 700; color: #334155;">{sign}{attr:.4f}</span>
+                                            <span class="{pill_class}">{pill_label}</span>
+                                        </div>
+                                    </div>
+                                    <div style="background: #f1f5f9; border-radius: 6px; height: 10px; width: 100%; overflow: hidden;">
+                                        <div style="background: {bar_color}; width: {bar_pct}%; height: 100%; border-radius: 6px;"></div>
+                                    </div>
+                                </div>
+                                """,
+                                unsafe_allow_html=True,
+                            )
+
+                with st.expander("📄 View Raw Prediction JSON"):
                     st.json(result)
 
-            elif response.status_code == 422:
-                st.error("Validation Error: The input payload did not match the expected API schema.")
-                st.json(response.json())
+            elif resp.status_code == 422:
+                st.error("Validation Error: Input payload rejected by FastAPI schema.")
+                st.json(resp.json())
             else:
-                st.error(f"Inference server returned error: HTTP {response.status_code}")
-                st.code(response.text)
+                st.error(f"Inference error: HTTP {resp.status_code}")
+                st.code(resp.text)
 
         except requests.exceptions.ConnectionError:
             st.error(
-                f"❌ Connection Error: Unable to reach FastAPI service at `{predict_endpoint}`.\n\n"
-                "Please verify that the FastAPI backend is running using:\n"
+                f"❌ Connection Error: Unable to reach FastAPI backend at `{PREDICT_URL}`.\n\n"
+                "To test end-to-end, start the FastAPI server in another terminal:\n"
                 "```bash\n"
+                "cd /Users/krishukumar/customer_churn_engine\n"
                 "uvicorn src.api.main:app --host 0.0.0.0 --port 8000\n"
                 "```"
             )
         except requests.exceptions.Timeout:
-            st.error("⏱️ Request Timeout: The inference service took too long to respond.")
-        except Exception as ex:
-            st.error(f"Unexpected error: {ex}")
+            st.error("⏱️ Request Timeout: The backend took longer than 6 seconds to respond.")
+        except Exception as e:
+            st.error(f"Unexpected error: {e}")
