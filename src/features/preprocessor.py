@@ -1,4 +1,4 @@
-"""Preprocessing pipeline builder using Scikit-Learn ColumnTransformer."""
+"""Preprocessing pipeline builder using Scikit-Learn ColumnTransformer and Factory Method."""
 
 from typing import List, Optional
 import numpy as np
@@ -9,7 +9,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-from src.data.schema import CATEGORICAL_FEATURES, NUMERICAL_FEATURES
+from src.data.dataset_schema import CATEGORICAL_FEATURES, NUMERICAL_FEATURES
 
 
 class TotalChargesCleaner(BaseEstimator, TransformerMixin):
@@ -31,7 +31,6 @@ class TotalChargesCleaner(BaseEstimator, TransformerMixin):
                 )
             return X_copy
         elif isinstance(X, np.ndarray):
-            # If passed as 2D numpy array, attempt numeric conversion
             cleaned = []
             for val in X.ravel():
                 try:
@@ -44,50 +43,87 @@ class TotalChargesCleaner(BaseEstimator, TransformerMixin):
             return np.array(cleaned, dtype=float).reshape(-1, 1)
         return X
 
+    def get_feature_names_out(self, input_features=None):
+        """Pass through feature names for Scikit-learn Pipeline compatibility."""
+        if input_features is None:
+            return np.array([self.column_name], dtype=object)
+        return np.asarray(input_features, dtype=object)
+
+
+class PreprocessorFactory:
+    """Factory for building feature transformation pipelines and ColumnTransformers."""
+
+    @staticmethod
+    def create_numeric_pipeline(
+        cleaner_column: str = "TotalCharges",
+        impute_strategy: str = "median",
+    ) -> Pipeline:
+        """Constructs preprocessing pipeline for numerical features."""
+        return Pipeline(
+            steps=[
+                ("cleaner", TotalChargesCleaner(column_name=cleaner_column)),
+                ("imputer", SimpleImputer(strategy=impute_strategy)),
+                ("scaler", StandardScaler()),
+            ]
+        )
+
+    @staticmethod
+    def create_categorical_pipeline(
+        impute_strategy: str = "most_frequent",
+        handle_unknown: str = "ignore",
+    ) -> Pipeline:
+        """Constructs preprocessing pipeline for categorical features."""
+        return Pipeline(
+            steps=[
+                ("imputer", SimpleImputer(strategy=impute_strategy)),
+                (
+                    "onehot",
+                    OneHotEncoder(
+                        handle_unknown=handle_unknown,
+                        sparse_output=False,
+                    ),
+                ),
+            ]
+        )
+
+    @classmethod
+    def create_preprocessor(
+        cls,
+        numerical_features: Optional[List[str]] = None,
+        categorical_features: Optional[List[str]] = None,
+    ) -> ColumnTransformer:
+        """Builds a leak-free Scikit-learn ColumnTransformer for numerical and categorical columns.
+
+        - Numerical: TotalChargesCleaner -> SimpleImputer(median) -> StandardScaler
+        - Categorical: SimpleImputer(most_frequent) -> OneHotEncoder(ignore unknown, dense)
+        """
+        num_cols = numerical_features or NUMERICAL_FEATURES
+        cat_cols = categorical_features or CATEGORICAL_FEATURES
+
+        numeric_transformer = cls.create_numeric_pipeline()
+        categorical_transformer = cls.create_categorical_pipeline()
+
+        preprocessor = ColumnTransformer(
+            transformers=[
+                ("num", numeric_transformer, num_cols),
+                ("cat", categorical_transformer, cat_cols),
+            ],
+            remainder="drop",
+            verbose_feature_names_out=False,
+        )
+
+        return preprocessor
+
 
 def build_preprocessor(
     numerical_features: Optional[List[str]] = None,
     categorical_features: Optional[List[str]] = None,
 ) -> ColumnTransformer:
-    """Builds a leak-free Scikit-learn ColumnTransformer for numerical and categorical columns.
-
-    - Numerical: TotalCharges coercion -> SimpleImputer(median) -> StandardScaler
-    - Categorical: SimpleImputer(most_frequent) -> OneHotEncoder(ignore unknown, dense)
-    """
-    num_cols = numerical_features or NUMERICAL_FEATURES
-    cat_cols = categorical_features or CATEGORICAL_FEATURES
-
-    numeric_transformer = Pipeline(
-        steps=[
-            ("cleaner", TotalChargesCleaner()),
-            ("imputer", SimpleImputer(strategy="median")),
-            ("scaler", StandardScaler()),
-        ]
+    """Backward-compatible entry point delegating to PreprocessorFactory."""
+    return PreprocessorFactory.create_preprocessor(
+        numerical_features=numerical_features,
+        categorical_features=categorical_features,
     )
-
-    categorical_transformer = Pipeline(
-        steps=[
-            ("imputer", SimpleImputer(strategy="most_frequent")),
-            (
-                "onehot",
-                OneHotEncoder(
-                    handle_unknown="ignore",
-                    sparse_output=False,
-                ),
-            ),
-        ]
-    )
-
-    preprocessor = ColumnTransformer(
-        transformers=[
-            ("num", numeric_transformer, num_cols),
-            ("cat", categorical_transformer, cat_cols),
-        ],
-        remainder="drop",
-        verbose_feature_names_out=False,
-    )
-
-    return preprocessor
 
 
 def get_feature_names_from_preprocessor(preprocessor: ColumnTransformer) -> List[str]:
@@ -95,14 +131,23 @@ def get_feature_names_from_preprocessor(preprocessor: ColumnTransformer) -> List
     try:
         return list(preprocessor.get_feature_names_out())
     except Exception:
-        # Fallback for manual reconstruction if get_feature_names_out fails
         feature_names = []
         for name, trans, cols in preprocessor.transformers_:
+            if name == "remainder" and trans == "drop":
+                continue
             if name == "num":
                 feature_names.extend(cols)
             elif name == "cat":
-                if hasattr(trans.named_steps["onehot"], "get_feature_names_out"):
-                    feature_names.extend(trans.named_steps["onehot"].get_feature_names_out(cols))
-                else:
+                try:
+                    if hasattr(trans, "named_steps") and "onehot" in trans.named_steps:
+                        feature_names.extend(trans.named_steps["onehot"].get_feature_names_out(cols))
+                    else:
+                        feature_names.extend(cols)
+                except Exception:
+                    feature_names.extend(cols)
+            else:
+                try:
+                    feature_names.extend(trans.get_feature_names_out(cols))
+                except Exception:
                     feature_names.extend(cols)
         return feature_names

@@ -10,10 +10,13 @@ dataset:
 
 model:
   decision_threshold: 0.45
-  output_pipeline_path: "models/churn_pipeline.joblib"
-  output_explainer_path: "models/shap_explainer.joblib"
-  output_metrics_path: "models/metrics.json"
-  shap_plot_path: "reports/figures/shap_summary.png"
+  output_pipeline_path: "artifacts/models/churn_pipeline.joblib"
+  output_explainer_path: "artifacts/models/shap_explainer.joblib"
+  output_metrics_path: "artifacts/metrics/metrics.json"
+  shap_plot_path: "artifacts/reports/shap_summary.png"
+  legacy_pipeline_path: "models/churn_pipeline.joblib"
+  legacy_explainer_path: "models/shap_explainer.joblib"
+  legacy_metrics_path: "models/metrics.json"
 
 features:
   numerical:

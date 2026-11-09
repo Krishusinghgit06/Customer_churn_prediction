@@ -63,37 +63,77 @@ flowchart LR
 customer_churn_engine/
 ├── config/
 │   └── config.yaml              # Hyperparameters, paths, and feature configurations
+├── artifacts/                   # Primary production artifact store
+│   ├── models/
+│   │   ├── churn_pipeline.joblib# Serialized Scikit-learn Pipeline
+│   │   └── shap_explainer.joblib# Serialized SHAP TreeExplainer
+│   ├── metrics/
+│   │   └── metrics.json         # Benchmark comparison metrics
+│   └── reports/
+│       └── shap_summary.png     # Global SHAP beeswarm plot
+├── models/                      # Backward-compatible model artifact mirror
 ├── data/
 │   └── raw/
 │       └── telco_customer_churn.csv # Raw/synthetic Telco dataset
-├── models/
-│   ├── churn_pipeline.joblib    # Serialized Scikit-learn Pipeline
-│   ├── shap_explainer.joblib    # Serialized SHAP TreeExplainer
-│   └── metrics.json             # Benchmark comparison metrics
 ├── reports/
 │   └── figures/
-│       └── shap_summary.png     # Global SHAP beeswarm plot
+│       └── shap_summary.png     # Legacy report figures location
 ├── src/
-│   ├── data/
-│   │   ├── fetch_data.py        # Robust fetcher with synthetic fallback
-│   │   └── schema.py            # Feature definitions & Pydantic models
-│   ├── features/
-│   │   └── preprocessor.py      # ColumnTransformer pipeline builder
-│   ├── models/
-│   │   ├── train.py             # Model training, comparison & export
-│   │   ├── evaluate.py          # Classification metrics computation
+│   ├── core/                    # Core configuration and exception handling
+│   │   ├── config.py            # Typed Settings and YAML loader
+│   │   └── exceptions.py        # Domain-specific error hierarchies
+│   ├── data/                    # Ingestion and dataset schemas
+│   │   ├── dataset_schema.py    # Feature constants & tabular schema (no name clash)
+│   │   ├── loader_factory.py    # DataLoaderFactory (Local, Remote, Synthetic)
+│   │   ├── fetch_data.py        # Ingestion entrypoint using DataLoaderFactory
+│   │   └── schema.py            # Backward-compatible schema bridge
+│   ├── features/                # Leak-free preprocessing pipelines
+│   │   └── preprocessor.py      # PreprocessorFactory & TotalChargesCleaner
+│   ├── modeling/                # Machine learning models, pipelines, and SHAP
+│   │   ├── factory.py           # ModelFactory & PipelineFactory
+│   │   ├── train.py             # End-to-end training orchestrator
+│   │   ├── evaluate.py          # Metrics computation
 │   │   └── explain.py           # SHAP TreeExplainer integration
-│   └── api/
-│       ├── main.py              # FastAPI application entrypoint
-│       ├── routes.py            # Endpoint handlers (/health, /predict)
-│       ├── schemas.py           # API request & response schemas
-│       └── service.py           # ModelManager inference singleton
+│   ├── models/                  # Backward-compatible shim delegating to src.modeling
+│   ├── api/                     # Serving layer using Application Factory pattern
+│   │   ├── app.py               # create_app() Application Factory
+│   │   ├── main.py              # CLI & ASGI entrypoint
+│   │   ├── routes.py            # Endpoints (/health, /predict)
+│   │   ├── schemas.py           # CustomerPayload & API DTO schemas
+│   │   └── service.py           # ModelManager & ModelServiceFactory
+│   └── ui/                      # Dedicated presentation layer
+│       └── dashboard.py         # Streamlit interactive dashboard
 └── tests/
     ├── conftest.py              # Shared fixtures
     ├── test_api.py              # API contract integration tests
+    ├── test_factories.py        # Unit tests for all Factory Method implementations
     ├── test_model.py            # Pipeline and explainability unit tests
     └── test_preprocessing.py    # Transformer & leakage tests
 ```
+
+---
+
+## Design Patterns: Factory Methods
+
+This codebase strictly implements the **Factory Method** pattern across all key subsystems to decouple creation from execution:
+
+1. **Application Factory (`src.api.app.create_app`)**:
+   - Creates and configures FastAPI instances with configurable dependencies, lifecycles, and middleware.
+   - Enables isolated test environments and production deployments without global state contamination.
+
+2. **Model & Pipeline Factory (`src.modeling.factory.ModelFactory`, `PipelineFactory`)**:
+   - `ModelFactory`: Dynamically registers and instantiates ML estimators (`xgboost`, `logistic_regression`, `random_forest`) with standardized hyperparameter defaults.
+   - `PipelineFactory`: Assembles full end-to-end `Pipeline` objects combining `ColumnTransformer` feature transformers with chosen estimators.
+
+3. **Preprocessor Factory (`src.features.preprocessor.PreprocessorFactory`)**:
+   - Builds numerical cleaning/imputation/scaling sub-pipelines and categorical imputation/encoding sub-pipelines.
+   - Assembles leak-free `ColumnTransformer` configurations.
+
+4. **Data Loader Factory (`src.data.loader_factory.DataLoaderFactory`)**:
+   - Provides concrete data loaders (`LocalCsvDataLoader`, `RemoteCsvDataLoader`, `SyntheticDataLoader`, and `AutoFallbackDataLoader`).
+
+5. **Inference Service Factory (`src.api.service.ModelServiceFactory`)**:
+   - Instantiates configured `ModelManager` services with custom artifact paths and calibrated decision thresholds.
 
 ---
 
@@ -102,7 +142,6 @@ customer_churn_engine/
 ### 1. Prerequisites & Virtual Environment
 
 ```bash
-cd /Users/krishukumar/.gemini/antigravity/scratch/customer_churn_engine
 uv venv .venv
 source .venv/bin/activate
 uv pip install -r requirements.txt
@@ -111,14 +150,14 @@ uv pip install -r requirements.txt
 ### 2. Train and Benchmark the Models
 
 ```bash
-python -m src.models.train
+python -m src.modeling.train
 ```
 
 Outputs:
-- Serializes `models/churn_pipeline.joblib`
-- Serializes `models/shap_explainer.joblib`
-- Generates `models/metrics.json`
-- Saves global summary plot `reports/figures/shap_summary.png`
+- Serializes `artifacts/models/churn_pipeline.joblib` (and `models/churn_pipeline.joblib`)
+- Serializes `artifacts/models/shap_explainer.joblib` (and `models/shap_explainer.joblib`)
+- Generates `artifacts/metrics/metrics.json`
+- Saves global summary plot `artifacts/reports/shap_summary.png`
 
 ### 3. Run the Test Suite
 
@@ -126,7 +165,7 @@ Outputs:
 pytest -v
 ```
 
-All 14 tests will execute, validating preprocessing, model logic, and FastAPI endpoints.
+All 26 automated unit and integration tests will execute, covering factories, preprocessing, model serialization, probability bounds, and API contracts.
 
 ### 4. Start the FastAPI Service
 
@@ -135,6 +174,12 @@ uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 Interactive documentation is available at `http://localhost:8000/docs`.
+
+### 5. Launch the Streamlit Dashboard
+
+```bash
+streamlit run src/ui/dashboard.py
+```
 
 ---
 
