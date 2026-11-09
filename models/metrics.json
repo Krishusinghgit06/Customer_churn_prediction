@@ -1,0 +1,36 @@
+{
+  "winning_model": "xgboost",
+  "decision_threshold": 0.45,
+  "models": {
+    "logistic_regression": {
+      "threshold": 0.45,
+      "roc_auc": 0.8982,
+      "pr_auc": 0.7482,
+      "recall": 0.9185,
+      "precision": 0.5527,
+      "f1_score": 0.6902,
+      "brier_score": 0.1366,
+      "confusion_matrix": {
+        "true_negative": 703,
+        "false_positive": 301,
+        "false_negative": 33,
+        "true_positive": 372
+      }
+    },
+    "xgboost": {
+      "threshold": 0.45,
+      "roc_auc": 0.9004,
+      "pr_auc": 0.7449,
+      "recall": 0.9259,
+      "precision": 0.5435,
+      "f1_score": 0.6849,
+      "brier_score": 0.1381,
+      "confusion_matrix": {
+        "true_negative": 689,
+        "false_positive": 315,
+        "false_negative": 30,
+        "true_positive": 375
+      }
+    }
+  }
+}

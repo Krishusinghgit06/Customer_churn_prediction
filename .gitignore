@@ -1,0 +1,27 @@
+# Python & Virtual Environments
+.venv/
+env/
+venv/
+ENV/
+build/
+dist/
+*.egg-info/
+
+# Bytecode & Caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS Artifacts
+.DS_Store
+Thumbs.db
+
+# IDE & Editor files
+.vscode/
+.idea/
+
+# Data caches (raw generated data can be reproduced via src.data.fetch_data)
+data/processed/

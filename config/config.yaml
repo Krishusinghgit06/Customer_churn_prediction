@@ -1,0 +1,39 @@
+dataset:
+  raw_data_path: "data/raw/telco_customer_churn.csv"
+  download_urls:
+    - "https://raw.githubusercontent.com/IBM/telco-customer-churn-on-icp4d/master/data/Telco-Customer-Churn.csv"
+    - "https://raw.githubusercontent.com/datasciencedojo/datasets/master/churn.csv"
+  test_size: 0.20
+  random_state: 42
+  target_column: "Churn"
+  id_column: "customerID"
+
+model:
+  decision_threshold: 0.45
+  output_pipeline_path: "models/churn_pipeline.joblib"
+  output_explainer_path: "models/shap_explainer.joblib"
+  output_metrics_path: "models/metrics.json"
+  shap_plot_path: "reports/figures/shap_summary.png"
+
+features:
+  numerical:
+    - "tenure"
+    - "MonthlyCharges"
+    - "TotalCharges"
+  categorical:
+    - "gender"
+    - "SeniorCitizen"
+    - "Partner"
+    - "Dependents"
+    - "PhoneService"
+    - "MultipleLines"
+    - "InternetService"
+    - "OnlineSecurity"
+    - "OnlineBackup"
+    - "DeviceProtection"
+    - "TechSupport"
+    - "StreamingTV"
+    - "StreamingMovies"
+    - "Contract"
+    - "PaperlessBilling"
+    - "PaymentMethod"

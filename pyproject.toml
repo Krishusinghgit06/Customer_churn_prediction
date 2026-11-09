@@ -1,0 +1,34 @@
+[project]
+name = "customer-churn-engine"
+version = "0.1.0"
+description = "Customer Churn Prediction Engine with FastAPI & Explainability"
+authors = [
+    { name = "ML Engineering Team" }
+]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "scikit-learn>=1.4.0",
+    "pandas>=2.2.0",
+    "numpy>=1.26.0",
+    "xgboost>=2.0.0",
+    "shap>=0.45.0",
+    "fastapi>=0.110.0",
+    "uvicorn>=0.28.0",
+    "pydantic>=2.6.0",
+    "joblib>=1.3.0",
+    "matplotlib>=3.8.0",
+    "pytest>=8.0.0",
+    "httpx>=0.27.0",
+    "pyyaml>=6.0.1",
+    "requests>=2.31.0",
+    "streamlit>=1.32.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
